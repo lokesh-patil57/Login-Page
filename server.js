@@ -140,3 +140,91 @@ async function exchangeCodeForToken(code, provider) {
   return response.data;
 }
 
+// Fetch user info from the OAuth provider
+async function fetchUserInfo(accessToken, provider) {
+    const config = oauthConfig[provider];
+    let headers = { Authorization: `Bearer ${accessToken}` };
+    
+    // GitHub uses a different authorization header
+    if (provider === 'github') {
+      headers = { Authorization: `token ${accessToken}` };
+    }
+    
+    const response = await axios.get(config.userInfoUrl, { headers });
+    return response.data;
+  }
+  
+  // Find or create a user in the database
+  async function findOrCreateUser(userInfo, provider) {
+    // Extract user data based on provider
+    let userData;
+    
+    if (provider === 'google') {
+      userData = {
+        id: userInfo.sub,
+        name: userInfo.name,
+        email: userInfo.email,
+        picture: userInfo.picture,
+        provider
+      };
+    } else if (provider === 'github') {
+      userData = {
+        id: userInfo.id.toString(),
+        name: userInfo.name || userInfo.login,
+        email: userInfo.email || `${userInfo.login}@github.com`,
+        picture: userInfo.avatar_url,
+        provider
+      };
+    }
+    
+    // In a real app, you would store this in your database
+    // For this example, we'll use our in-memory store
+    const userKey = `${provider}:${userData.id}`;
+    
+    if (!users[userKey]) {
+      // Create new user
+      users[userKey] = {
+        ...userData,
+        created_at: new Date(),
+        updated_at: new Date()
+      };
+    } else {
+      // Update existing user
+      users[userKey] = {
+        ...users[userKey],
+        ...userData,
+        updated_at: new Date()
+      };
+    }
+    
+    return users[userKey];
+  }
+  
+  // Middleware to authenticate JWT token
+  function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ error: 'Authorization token required' });
+    }
+    
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+      if (err) {
+        return res.status(403).json({ error: 'Invalid or expired token' });
+      }
+      
+      const userKey = `${user.provider}:${user.userId}`;
+      if (!users[userKey]) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      req.user = users[userKey];
+      next();
+    });
+  }
+  
+  // Start the server
+  app.listen(PORT, () => {
+    console.log(`OAuth backend server running on port ${PORT}`);
+  });
