@@ -42,41 +42,42 @@ const OAuthLoginPage = () => {
     }
   }, []);
 
-  // Exchange authorization code for access token
   const exchangeCodeForToken = async (code, provider) => {
     setIsLoading(true);
     setError('');
     
     try {
-      // In a real application, this request should be sent to your backend
-      // to securely exchange the code for a token
-      console.log(`Exchanging code for token with ${provider}...`);
+      // Send code to your backend
+      const response = await fetch('http://localhost:5000/api/auth/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ code, provider }),
+      });
       
-      // Mock successful authentication for demonstration
-      setTimeout(() => {
-        const mockUser = {
-          id: '123456',
-          name: 'John Doe',
-          email: 'john.doe@example.com',
-          provider
-        };
-        
-        // Save auth info in local storage
-        localStorage.setItem('authToken', 'mock-auth-token');
-        localStorage.setItem('userInfo', JSON.stringify(mockUser));
-        localStorage.removeItem('oauthProvider');
-        
-        setUser(mockUser);
-        setIsLoading(false);
-      }, 1000);
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Authentication failed');
+      }
+      
+      // Save auth info in local storage
+      localStorage.setItem('authToken', data.token);
+      localStorage.setItem('userInfo', JSON.stringify(data.user));
+      localStorage.removeItem('oauthProvider');
+      
+      setUser(data.user);
+      setIsLoading(false);
       
     } catch (err) {
+      console.error('Authentication error:', err);
       setError('Failed to authenticate. Please try again.');
       setIsLoading(false);
       localStorage.removeItem('oauthProvider');
     }
   };
-
+  
   // Initiate OAuth login
   const handleOAuthLogin = (provider) => {
     localStorage.setItem('oauthProvider', provider);
